@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "bitecheck-menu-data": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/index.ts"],
+      "disabled": false,
+      "autoApprove": [
+        "query_menu_items",
+        "find_discrepancies",
+        "get_field_distribution"
+      ]
+    }
+  }
+}
