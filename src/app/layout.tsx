@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Inter_Tight, JetBrains_Mono } from "next/font/google";
+import { UserContextProvider } from "@/context/UserContext";
+import { loadHydratedProfile } from "@/lib/user-profile";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,17 +26,22 @@ export const metadata: Metadata = {
     "Real-time, source-cited dining recommendations for students with allergies, religious restrictions, and dietary needs.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const profile = await loadHydratedProfile();
+
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${inter.variable} ${interTight.variable} ${jetbrains.variable}`}
     >
-      <body className="bg-bc-bg text-bc-text">{children}</body>
+      <body suppressHydrationWarning className="bg-bc-bg text-bc-text">
+        <UserContextProvider profile={profile}>{children}</UserContextProvider>
+      </body>
     </html>
   );
 }

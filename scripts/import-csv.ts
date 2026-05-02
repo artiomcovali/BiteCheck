@@ -10,12 +10,11 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { config } from "dotenv";
 
-// Load .env.local
-config({ path: resolve(process.cwd(), ".env.local") });
+loadEnvFile(".env.local");
+loadEnvFile(".env");
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -28,6 +27,68 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const EXPECTED_HEADERS = [
+  "date",
+  "day_of_week",
+  "location",
+  "building",
+  "meal_period",
+  "station",
+  "item_name",
+  "item_id",
+  "portion",
+  "description",
+  "added_sugar_g",
+  "calcium_mg",
+  "calories",
+  "calories_from_fat",
+  "cholesterol_mg",
+  "fiber_g",
+  "iron_mg",
+  "potassium_mg",
+  "protein_g",
+  "sat_fat_g",
+  "sodium_mg",
+  "sugar_g",
+  "total_carbs_g",
+  "total_fat_g",
+  "trans_fat_g",
+  "vitamin_c_mg",
+  "vitamin_d_mcg",
+  "ingredients",
+  "allergens",
+  "dietary_labels",
+] as const;
+
+type CsvHeader = (typeof EXPECTED_HEADERS)[number];
+type MenuItemRow = Record<CsvHeader, string | number | null>;
+
+function loadEnvFile(filename: string) {
+  const fullPath = resolve(process.cwd(), filename);
+  if (!existsSync(fullPath)) return;
+
+  const contents = readFileSync(fullPath, "utf-8");
+  for (const line of contents.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const equalsIndex = trimmed.indexOf("=");
+    if (equalsIndex === -1) continue;
+
+    const key = trimmed.slice(0, equalsIndex).trim();
+    const rawValue = trimmed.slice(equalsIndex + 1).trim();
+    if (!key || process.env[key] !== undefined) continue;
+
+    const unquoted =
+      (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+      (rawValue.startsWith("'") && rawValue.endsWith("'"))
+        ? rawValue.slice(1, -1)
+        : rawValue;
+
+    process.env[key] = unquoted;
+  }
+}
 
 function parseCSVLine(line: string): string[] {
   const fields: string[] = [];
@@ -85,51 +146,51 @@ async function main() {
   );
   console.log(`Found ${lines.length - 1} data rows`);
   console.log(`Headers: ${headers.join(", ")}`);
-
-  // Map CSV headers to our DB columns
-  // The CSV headers from the actual file:
-  // date, meal_period, location, station, item_name, description,
-  // ingredients, dietary_labels, allergens, calories, total_fat_g,
-  // sat_fat_g, trans_fat_g, cholesterol_mg, sodium_mg, total_carbs_g,
-  // fiber_g, sugar_g, added_sugar_g, protein_g, calcium_mg, iron_mg,
-  // potassium_mg, vitamin_c_mg, vitamin_d_mcg
+  if (
+    headers.length !== EXPECTED_HEADERS.length ||
+    !EXPECTED_HEADERS.every((header, index) => headers[index] === header)
+  ) {
+    console.error("CSV headers do not match the expected menu_items schema.");
+    console.error(`Expected: ${EXPECTED_HEADERS.join(", ")}`);
+    process.exit(1);
+  }
 
   const numericFields = new Set([
-    "calories",
-    "total_fat_g",
-    "sat_fat_g",
-    "trans_fat_g",
-    "cholesterol_mg",
-    "sodium_mg",
-    "total_carbs_g",
-    "fiber_g",
-    "sugar_g",
     "added_sugar_g",
-    "protein_g",
     "calcium_mg",
+    "calories",
+    "calories_from_fat",
+    "cholesterol_mg",
+    "fiber_g",
     "iron_mg",
     "potassium_mg",
+    "protein_g",
+    "total_fat_g",
+    "sat_fat_g",
+    "sodium_mg",
+    "total_carbs_g",
+    "sugar_g",
+    "trans_fat_g",
     "vitamin_c_mg",
     "vitamin_d_mcg",
   ]);
 
-  const rows: Record<string, unknown>[] = [];
+  const rows: MenuItemRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
-    const row: Record<string, unknown> = {};
+    const row = {} as MenuItemRow;
 
     for (let j = 0; j < headers.length; j++) {
-      const header = headers[j];
+      const header = headers[j] as CsvHeader;
       const value = values[j] || "";
 
       if (numericFields.has(header)) {
         row[header] = parseNumeric(value);
-      } else if (header === "date") {
-        // Keep date as string — Supabase handles ISO date strings
-        row[header] = value || null;
+      } else if (header === "meal_period") {
+        row[header] = value === "Everyday" ? "Every Day" : value;
       } else {
-        row[header] = value || null;
+        row[header] = value;
       }
     }
 
@@ -147,11 +208,13 @@ async function main() {
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
-    const { error } = await supabase.from("menu_items").insert(batch);
+    const { error } = await supabase.from("menu_items").upsert(batch, {
+      onConflict: "date,item_id,location,meal_period,station",
+    });
 
     if (error) {
       console.error(
-        `Error inserting batch starting at row ${i}:`,
+        `Error upserting batch starting at row ${i}:`,
         error.message
       );
       console.error("First row in failed batch:", JSON.stringify(batch[0], null, 2));
@@ -162,7 +225,7 @@ async function main() {
     console.log(`Inserted ${inserted}/${rows.length} rows...`);
   }
 
-  console.log(`\nDone! Inserted ${inserted} rows into menu_items.`);
+  console.log(`\nDone! Upserted ${inserted} rows into menu_items.`);
 
   // Quick verification
   const { count } = await supabase

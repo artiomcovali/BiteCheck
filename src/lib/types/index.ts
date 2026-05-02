@@ -25,30 +25,36 @@ export type UserProfile = {
  * @see spec 01 — Agent Decision Loop (Inputs)
  */
 export type MenuItem = {
+  date: string;
+  day_of_week: string;
   item_name: string;
+  item_id: string;
+  building: string;
   location: string;
   meal_period: string;
   station: string;
+  portion: string;
   description: string;
   ingredients: string;
   dietary_labels: string;
   allergens: string;
-  calories: number;
-  protein_g: number;
-  total_fat_g: number;
-  total_carbs_g: number;
-  fiber_g: number;
-  sodium_mg: number;
-  sugar_g: number;
-  added_sugar_g: number;
-  sat_fat_g: number;
-  trans_fat_g: number;
-  cholesterol_mg: number;
-  calcium_mg: number;
-  iron_mg: number;
-  potassium_mg: number;
-  vitamin_c_mg: number;
-  vitamin_d_mcg: number;
+  calories: number | null;
+  calories_from_fat: number | null;
+  protein_g: number | null;
+  total_fat_g: number | null;
+  total_carbs_g: number | null;
+  fiber_g: number | null;
+  sodium_mg: number | null;
+  sugar_g: number | null;
+  added_sugar_g: number | null;
+  sat_fat_g: number | null;
+  trans_fat_g: number | null;
+  cholesterol_mg: number | null;
+  calcium_mg: number | null;
+  iron_mg: number | null;
+  potassium_mg: number | null;
+  vitamin_c_mg: number | null;
+  vitamin_d_mcg: number | null;
 };
 
 /**

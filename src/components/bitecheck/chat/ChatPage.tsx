@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useUser } from "@/context/UserContext";
 import { useChatStream } from "@/lib/chat/use-chat-stream";
-import { PERSONAS, type Persona } from "@/lib/chat/profile";
+import { getOrCreateSessionId } from "@/lib/chat/session";
 import { TopBar } from "./TopBar";
 import { EmptyChat } from "./EmptyChat";
 import { ChatInput } from "./ChatInput";
@@ -18,11 +19,17 @@ import { TurnRenderer } from "./EventStream";
  * scopes them out for the streaming UI.
  */
 export function ChatPage() {
-  const [persona, setPersona] = React.useState<Persona>(PERSONAS[0]);
+  const { profile } = useUser();
   const [theme, setTheme] = React.useState<"light" | "dark">("light");
   const [draft, setDraft] = React.useState("");
+  const [sessionId, setSessionId] = React.useState<string>("");
   const { turns, streaming, send, reset } = useChatStream();
   const threadRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Resolve sessionId on the client (sessionStorage isn't available during SSR).
+  React.useEffect(() => {
+    setSessionId(getOrCreateSessionId());
+  }, []);
 
   // Apply theme to <html data-theme>. Reads once from system preference on
   // mount, then user toggle takes over.
@@ -48,19 +55,15 @@ export function ChatPage() {
   }, [lastEventCount, turns.length]);
 
   const handleAsk = async (q: string) => {
+    if (!sessionId || !profile) return;
     setDraft("");
-    await send(q, persona.profile);
-  };
-
-  const cyclePersona = () => {
-    const idx = PERSONAS.findIndex((p) => p.id === persona.id);
-    setPersona(PERSONAS[(idx + 1) % PERSONAS.length]);
+    await send(q, profile.profile, sessionId);
   };
 
   const replayLastTurn = async () => {
     const last = turns.at(-1);
-    if (!last || streaming) return;
-    await send(last.query, persona.profile);
+    if (!last || streaming || !sessionId || !profile) return;
+    await send(last.query, profile.profile, sessionId);
   };
 
   return (
@@ -73,9 +76,6 @@ export function ChatPage() {
       }}
     >
       <TopBar
-        initial={persona.initial}
-        chips={persona.chips}
-        onProfileClick={cyclePersona}
         onThemeToggle={() =>
           setTheme((t) => (t === "dark" ? "light" : "dark"))
         }
@@ -91,7 +91,7 @@ export function ChatPage() {
         }}
       >
         {turns.length === 0 ? (
-          <EmptyChat name={persona.name} onAsk={handleAsk} />
+          <EmptyChat name={profile?.name ?? "there"} onAsk={handleAsk} />
         ) : (
           <div
             style={{

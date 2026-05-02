@@ -29,7 +29,7 @@ export function useChatStream({ endpoint = "/api/chat" }: Options = {}) {
   const abortRef = React.useRef<AbortController | null>(null);
 
   const send = React.useCallback(
-    async (query: string, profile: UserProfile) => {
+    async (query: string, profile: UserProfile, sessionId: string) => {
       const trimmed = query.trim();
       if (!trimmed || streaming) return;
 
@@ -67,7 +67,7 @@ export function useChatStream({ endpoint = "/api/chat" }: Options = {}) {
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: trimmed, profile }),
+          body: JSON.stringify({ query: trimmed, profile, sessionId }),
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {

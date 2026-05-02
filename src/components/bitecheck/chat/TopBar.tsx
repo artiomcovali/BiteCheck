@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+import { useUser } from "@/context/UserContext";
 import { ProfilePill, Wordmark } from "../primitives";
 import { BCIcon } from "../icons";
 
@@ -9,18 +11,38 @@ import { BCIcon } from "../icons";
  * being filtered against a real user profile (spec 03 — Profile bar).
  */
 export function TopBar({
-  initial,
-  chips,
-  onProfileClick,
   onThemeToggle,
   isDark,
 }: {
-  initial: string;
-  chips: string[];
-  onProfileClick?: () => void;
   onThemeToggle?: () => void;
   isDark?: boolean;
 }) {
+  const { profile } = useUser();
+  const [open, setOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
   return (
     <header
       style={{
@@ -39,11 +61,67 @@ export function TopBar({
     >
       <Wordmark size={18} />
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <ProfilePill
-          initial={initial}
-          chips={chips}
-          onClick={onProfileClick}
-        />
+        {profile && (
+          <div ref={menuRef} style={{ position: "relative" }}>
+            <ProfilePill
+              initial={profile.initial}
+              chips={profile.chips}
+              onClick={() => setOpen((current) => !current)}
+            />
+            {open && (
+              <div
+                className="bc-card-in"
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "calc(100% + 8px)",
+                  minWidth: 220,
+                  padding: 8,
+                  borderRadius: 16,
+                  background: "var(--bc-surface)",
+                  border: "1px solid var(--bc-hairline)",
+                  boxShadow: "var(--bc-shadow-lg)",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "8px 10px 10px",
+                    borderBottom: "1px solid var(--bc-hairline)",
+                    marginBottom: 6,
+                  }}
+                >
+                  <div className="bc-h3" style={{ fontSize: 15 }}>
+                    {profile.name}
+                  </div>
+                  <div
+                    className="bc-meta"
+                    style={{ color: "var(--bc-text-ter)", marginTop: 2 }}
+                  >
+                    PolyCard ${profile.polycard_balance.toFixed(2)}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled
+                  style={menuButtonStyle(true)}
+                >
+                  <span>Settings</span>
+                  <span className="bc-meta" style={{ color: "var(--bc-text-ter)" }}>
+                    Soon
+                  </span>
+                </button>
+
+                <form action="/auth/signout" method="post">
+                  <button type="submit" style={menuButtonStyle(false)}>
+                    <span>Sign out</span>
+                    <BCIcon name="chevron-right" size={14} strokeWidth={2.1} />
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
         {onThemeToggle && (
           <button
             type="button"
@@ -72,4 +150,21 @@ export function TopBar({
       </div>
     </header>
   );
+}
+
+function menuButtonStyle(disabled: boolean): React.CSSProperties {
+  return {
+    width: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "none",
+    background: "transparent",
+    color: disabled ? "var(--bc-text-ter)" : "var(--bc-text)",
+    cursor: disabled ? "not-allowed" : "pointer",
+    textAlign: "left",
+  };
 }
