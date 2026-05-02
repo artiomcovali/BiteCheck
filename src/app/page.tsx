@@ -1,3 +1,5 @@
+import { ChatPage } from "@/components/bitecheck/chat/ChatPage";
+
 export default function Home() {
-  return <h1>BiteCheck</h1>;
+  return <ChatPage />;
 }

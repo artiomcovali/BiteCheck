@@ -1,3 +1,254 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * BiteCheck design tokens.
+ * Cal Poly approved brand palette: Poly Green primary, Coast Sage / Sycamore for safe,
+ * Heritage Orange for warnings, deepened Heritage for unsafe, Pismo / Mission Beige neutrals.
+ * Mirror the JSX design tokens at polyplates/project/bc-tokens.jsx.
+ */
+:root {
+  --bc-bg: #f6f4ee;
+  --bc-surface: #ffffff;
+  --bc-surface-alt: #efebe0;
+  --bc-hairline: rgba(20, 30, 30, 0.08);
+  --bc-hairline-2: rgba(20, 30, 30, 0.16);
+
+  --bc-text: #0f1a22;
+  --bc-text-sec: #54585a;
+  --bc-text-ter: #8e9089;
+  --bc-text-inv: #f6f4ee;
+
+  --bc-primary: #154734;
+  --bc-primary-ink: #0e2f23;
+  --bc-primary-fog: #e2ece5;
+
+  --bc-safe: #789f90;
+  --bc-safe-ink: #3f5e55;
+  --bc-safe-fog: #e5ede9;
+
+  --bc-warn: #ff6a39;
+  --bc-warn-ink: #a23914;
+  --bc-warn-fog: #fceae0;
+
+  --bc-unsafe: #a23914;
+  --bc-unsafe-ink: #6d2308;
+  --bc-unsafe-fog: #f5dbcc;
+
+  --bc-neutral: #8e9089;
+  --bc-neutral-fog: #e5e5dd;
+
+  --bc-shadow-sm: 0 1px 2px rgba(15, 26, 34, 0.05), 0 1px 1px rgba(15, 26, 34, 0.03);
+  --bc-shadow-md: 0 1px 2px rgba(15, 26, 34, 0.04), 0 4px 14px rgba(15, 26, 34, 0.06);
+  --bc-shadow-lg: 0 2px 6px rgba(15, 26, 34, 0.05), 0 12px 28px rgba(15, 26, 34, 0.08);
+
+  --bc-font-display: "Inter Tight", "Inter", -apple-system, system-ui, sans-serif;
+  --bc-font-body: "Inter", -apple-system, system-ui, sans-serif;
+  --bc-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+[data-theme="dark"] {
+  --bc-bg: #0e1620;
+  --bc-surface: #172230;
+  --bc-surface-alt: #1f2d3c;
+  --bc-hairline: rgba(255, 255, 255, 0.07);
+  --bc-hairline-2: rgba(255, 255, 255, 0.14);
+
+  --bc-text: #f2f0e9;
+  --bc-text-sec: #a6a8a2;
+  --bc-text-ter: #6e726e;
+  --bc-text-inv: #0e1620;
+
+  --bc-primary: #9cc4b4;
+  --bc-primary-ink: #c4ddd2;
+  --bc-primary-fog: #1b2e27;
+
+  --bc-safe: #9cc4b4;
+  --bc-safe-ink: #c4ddd2;
+  --bc-safe-fog: #1b2e27;
+
+  --bc-warn: #ff8a5e;
+  --bc-warn-ink: #ffb596;
+  --bc-warn-fog: #3a1f11;
+
+  --bc-unsafe: #e27250;
+  --bc-unsafe-ink: #f0997c;
+  --bc-unsafe-fog: #3a1a0e;
+
+  --bc-neutral: #9ea5a0;
+  --bc-neutral-fog: #1f2730;
+
+  --bc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --bc-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --bc-shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+html,
+body {
+  background: var(--bc-bg);
+  color: var(--bc-text);
+  font-family: var(--bc-font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.05px;
+}
+
+/* Type tokens — utility-style helpers */
+.bc-display {
+  font-family: var(--bc-font-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.4px;
+}
+.bc-h1 {
+  font-family: var(--bc-font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.3px;
+}
+.bc-h2 {
+  font-family: var(--bc-font-display);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+.bc-h3 {
+  font-family: var(--bc-font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.1px;
+}
+.bc-body {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.05px;
+}
+.bc-body-sm {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.bc-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.bc-meta {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.bc-mono {
+  font-family: var(--bc-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Animations — mirror prototype timing */
+@keyframes bcShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+@keyframes bcShake {
+  10%,
+  90% {
+    transform: translate3d(-1px, 0, 0);
+  }
+  20%,
+  80% {
+    transform: translate3d(2px, 0, 0);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  40%,
+  60% {
+    transform: translate3d(3px, 0, 0);
+  }
+}
+@keyframes bcDot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+@keyframes bcCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes bcExpand {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 360px;
+  }
+}
+@keyframes bcPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(21, 71, 52, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(21, 71, 52, 0.06);
+  }
+}
+
+.bc-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bc-hairline) 0%,
+    var(--bc-hairline-2) 50%,
+    var(--bc-hairline) 100%
+  );
+  background-size: 200% 100%;
+  animation: bcShimmer 1.4s infinite ease-in-out;
+}
+.bc-card-in {
+  animation: bcCardIn 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.bc-shake {
+  animation: bcShake 520ms 80ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+.bc-expand {
+  animation: bcExpand 240ms ease-out;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-card-in,
+  .bc-shake,
+  .bc-expand,
+  .bc-shimmer {
+    animation: none;
+  }
+}
