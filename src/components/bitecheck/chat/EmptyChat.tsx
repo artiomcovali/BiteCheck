@@ -2,7 +2,11 @@
 
 import * as React from 'react';
 import { BCIcon } from '../icons';
-import { pickRandomSuggestions } from '@/lib/chat/suggestions';
+import { pickRandomSuggestions, SUGGESTION_BANK } from '@/lib/chat/suggestions';
+
+// Deterministic fallback used during SSR to avoid hydration mismatch.
+// Replaced with random picks in useEffect on the client.
+const STATIC_FALLBACK = SUGGESTION_BANK.slice(0, 3);
 
 export function EmptyChat({
   name,
@@ -13,7 +17,11 @@ export function EmptyChat({
   onAsk: (q: string) => void;
   introLabel?: string;
 }) {
-  const [suggestions] = React.useState(() => pickRandomSuggestions(3));
+  const [suggestions, setSuggestions] = React.useState(STATIC_FALLBACK);
+
+  React.useEffect(() => {
+    setSuggestions(pickRandomSuggestions(3));
+  }, []);
 
   return (
     <div

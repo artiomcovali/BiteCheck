@@ -488,39 +488,11 @@ export function ProfilePill({
 }
 
 export function Wordmark({ size = 18 }: { size?: number }) {
+  const logoSize = size + 4;
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-      <div style={{ position: 'relative', width: size + 2, height: size + 2 }}>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: 999,
-            background: 'var(--bc-primary)',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            inset: 4,
-            borderRadius: 999,
-            border: '1.5px solid var(--bc-text-inv)',
-            opacity: 0.85,
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: 4,
-            height: 4,
-            borderRadius: 999,
-            background: 'var(--bc-text-inv)',
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
-      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.svg" alt="" width={logoSize} height={logoSize} style={{ display: 'block' }} />
       <span
         style={{
           fontFamily: 'var(--bc-font-display)',

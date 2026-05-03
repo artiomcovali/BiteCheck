@@ -4,12 +4,18 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/bitecheck/primitives';
 import { BCIcon } from '@/components/bitecheck/icons';
-import { pickRandomSuggestions } from '@/lib/chat/suggestions';
+import { pickRandomSuggestions, SUGGESTION_BANK } from '@/lib/chat/suggestions';
+
+const STATIC_FALLBACK = SUGGESTION_BANK.slice(0, 3);
 
 export function DashboardQuickAsk() {
   const router = useRouter();
   const [query, setQuery] = React.useState('');
-  const [suggestions] = React.useState(() => pickRandomSuggestions(3));
+  const [suggestions, setSuggestions] = React.useState(STATIC_FALLBACK);
+
+  React.useEffect(() => {
+    setSuggestions(pickRandomSuggestions(3));
+  }, []);
 
   const submit = (nextQuery: string) => {
     const trimmed = nextQuery.trim();

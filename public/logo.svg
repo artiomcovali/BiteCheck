@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 217 215" role="img" aria-label="Green checkmark inside four scan-corner brackets">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Corner brackets -->
+    <path d="M57 38H38v19" stroke="#111820" stroke-width="8.5"/>
+    <path d="M160 38h19v19" stroke="#111820" stroke-width="8.5"/>
+    <path d="M38 152v19h19" stroke="#111820" stroke-width="8.5"/>
+    <path d="M179 152v19h-19" stroke="#111820" stroke-width="8.5"/>
+
+    <!-- Check mark -->
+    <path d="M69 110l30 25 49-54" stroke="#218B4F" stroke-width="16"/>
+  </g>
+</svg>
