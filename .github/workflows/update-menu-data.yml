@@ -1,0 +1,57 @@
+name: Update Cal Poly Menu Data
+
+on:
+  schedule:
+    # Runs every Monday at 6:00 AM Pacific during PDT.
+    # GitHub Actions cron uses UTC, so 13:00 UTC = 6:00 AM PDT.
+    - cron: '0 13 * * 1'
+
+  workflow_dispatch:
+
+jobs:
+  scrape-and-update-supabase:
+    runs-on: ubuntu-latest
+
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MENU_TABLE: menu_items
+      CSV_OUT: calpoly_menu_weekly.csv
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests cloudscraper playwright
+          python -m playwright install chromium
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Scrape weekly menu
+        run: |
+          python3 scrape_calpoly_dining.py --url https://dineoncampus.com/calpoly/ --out "${CSV_OUT}"
+
+      - name: Replace Supabase menu data
+        run: |
+          npx --yes tsx scripts/import-csv.ts "${CSV_OUT}"
+
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-calpoly-menu
+          path: "${{ env.CSV_OUT }}"
