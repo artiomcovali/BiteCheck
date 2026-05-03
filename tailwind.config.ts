@@ -3,15 +3,13 @@ import type { Config } from "tailwindcss";
 /**
  * Tailwind for BiteCheck.
  *
- * Brand color tokens are exposed as CSS custom properties in `globals.css` so
- * dark mode (driven by `data-theme="dark"`) can flip them in one place.
+ * Brand color tokens are exposed as CSS custom properties in `globals.css`.
  * Tailwind utilities below alias the same custom properties for ergonomics.
  *
  * @see src/app/globals.css for the source-of-truth palette.
  */
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
-  darkMode: ["class", '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {

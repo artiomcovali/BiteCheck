@@ -1,15 +1,19 @@
 "use client";
 
 /**
- * useChatStream — React hook that POSTs `{ query, profile }` to `/api/chat`
- * and parses the SSE response into typed `ReasoningEvent`s.
+ * useChatStream — React hook that POSTs `{ query, sessionId }` to
+ * `/api/chat` and parses the SSE response into typed `ReasoningEvent`s.
  *
- * Why hand-rolled instead of EventSource? EventSource only supports GET, and
- * we need to send the user profile in the body. This implementation reads the
- * fetch stream and parses the SSE wire format manually.
+ * The profile is *not* sent in the body; the route reads it from the
+ * authenticated Supabase session server-side. The client could not be
+ * authoritative about allergens even if we wanted it to be.
+ *
+ * Why hand-rolled instead of EventSource? EventSource only supports GET,
+ * and we need POST + a JSON body. This implementation reads the fetch
+ * stream and parses the SSE wire format manually.
  */
 import * as React from "react";
-import type { ReasoningEvent, UserProfile } from "@/lib/types";
+import type { ConversationTurn, ReasoningEvent } from "@/lib/types";
 
 export type ChatTurn = {
   id: string;
@@ -23,15 +27,28 @@ type Options = {
   endpoint?: string;
 };
 
+// How many prior turns to include in the request body. Classifier and
+// Q&A modules look at the most recent turn; the rest are kept for future
+// expansion. Server caps at 20.
+const HISTORY_TURNS = 6;
+
 export function useChatStream({ endpoint = "/api/chat" }: Options = {}) {
   const [turns, setTurns] = React.useState<ChatTurn[]>([]);
   const [streaming, setStreaming] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
+  // Snapshot the latest turns into a ref so the `send` callback doesn't
+  // need them in its dep array (and thus doesn't re-bind every render).
+  const turnsRef = React.useRef(turns);
+  React.useEffect(() => {
+    turnsRef.current = turns;
+  }, [turns]);
 
   const send = React.useCallback(
-    async (query: string, profile: UserProfile, sessionId: string) => {
+    async (query: string, sessionId: string) => {
       const trimmed = query.trim();
       if (!trimmed || streaming) return;
+
+      const history = buildHistory(turnsRef.current);
 
       const turnId =
         typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -67,7 +84,7 @@ export function useChatStream({ endpoint = "/api/chat" }: Options = {}) {
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: trimmed, profile, sessionId }),
+          body: JSON.stringify({ query: trimmed, sessionId, history }),
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {
@@ -77,7 +94,7 @@ export function useChatStream({ endpoint = "/api/chat" }: Options = {}) {
         }
         for await (const event of parseSseStream(res.body, controller.signal)) {
           appendEvent(event);
-          if (event.type === "complete") {
+          if (event.type === "complete" || event.type === "qna") {
             finalize("complete");
           } else if (event.type === "error") {
             finalize("error", event.message);
@@ -152,6 +169,51 @@ async function* parseSseStream(
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * Distill the last few completed turns into the compact `ConversationTurn`
+ * shape the server expects. Skips streaming or errored turns.
+ */
+function buildHistory(turns: ChatTurn[]): ConversationTurn[] {
+  const completed = turns
+    .filter((t) => t.status === "complete")
+    .slice(-HISTORY_TURNS);
+
+  const out: ConversationTurn[] = [];
+  for (const turn of completed) {
+    const completeEvent = turn.events.find(
+      (e): e is Extract<ReasoningEvent, { type: "complete" }> =>
+        e.type === "complete",
+    );
+    const qnaEvent = turn.events.find(
+      (e): e is Extract<ReasoningEvent, { type: "qna" }> => e.type === "qna",
+    );
+
+    if (qnaEvent) {
+      out.push({
+        mode: "qna",
+        query: turn.query,
+        answer: qnaEvent.answer,
+      });
+      continue;
+    }
+    if (completeEvent) {
+      out.push({
+        mode: "recommendation",
+        query: turn.query,
+        summary: completeEvent.reasoning_summary,
+        recommended_items: completeEvent.recommendations.map((r) => ({
+          item_name: r.item_name,
+          location: r.location,
+        })),
+        warned_items: completeEvent.warnings.map((w) => ({
+          item_name: w.item_name,
+        })),
+      });
+    }
+  }
+  return out;
 }
 
 function parseSseBlock(block: string): ReasoningEvent | null {

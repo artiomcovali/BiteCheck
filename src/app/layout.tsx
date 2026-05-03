@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Inter_Tight, JetBrains_Mono } from "next/font/google";
+import { AppShell } from "@/components/bitecheck/app/AppShell";
 import { UserContextProvider } from "@/context/UserContext";
 import { loadHydratedProfile } from "@/lib/user-profile";
 import "./globals.css";
@@ -40,7 +41,9 @@ export default async function RootLayout({
       className={`${inter.variable} ${interTight.variable} ${jetbrains.variable}`}
     >
       <body suppressHydrationWarning className="bg-bc-bg text-bc-text">
-        <UserContextProvider profile={profile}>{children}</UserContextProvider>
+        <UserContextProvider profile={profile}>
+          <AppShell>{children}</AppShell>
+        </UserContextProvider>
       </body>
     </html>
   );

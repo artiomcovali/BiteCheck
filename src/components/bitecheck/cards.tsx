@@ -92,6 +92,7 @@ const reasoningKindMeta: Record<
   audit: { icon: "database", label: "Auditing the data" },
   rank: { icon: "sort", label: "Ranking what's safe" },
   complete: { icon: "check-circle", label: "Recommendation" },
+  qna: { icon: "sparkle", label: "Answer" },
   error: { icon: "alert-tri", label: "Error" },
 };
 

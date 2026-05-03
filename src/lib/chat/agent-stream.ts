@@ -13,32 +13,37 @@
  *
  * @see .kiro/specs/01-agent-decision-loop.md
  */
-import type { ReasoningEvent, UserProfile } from "@/lib/types";
+import type {
+  ConversationTurn,
+  ParsedIntent,
+  ReasoningEvent,
+  UserProfile,
+} from "@/lib/types";
 import { parseQuery } from "@/lib/agent/parse-query";
 import { retrieveCandidates } from "@/lib/agent/retrieve-candidates";
 import { auditItems } from "@/lib/agent/audit-items";
 import { rankAndRecommend } from "@/lib/agent/rank-and-recommend";
+import { classifyQuery } from "@/lib/agent/classify-query";
+import { answerQuestion } from "@/lib/agent/answer-question";
 
 export type AgentStreamContext = {
   query: string;
   profile: UserProfile;
+  history: ConversationTurn[];
 };
 
 /**
- * The pipeline is "ready" when every dependency is configured: the OpenAI
- * key for parse/rank, and Supabase for retrieve. Until both are present we
- * stream fixtures instead of partially-broken real output.
+ * The pipeline is "ready" when OpenAI is configured. Supabase is mandatory
+ * for auth and is checked at the route layer (the user can't reach this
+ * adapter without an authenticated session), so the only remaining
+ * dev-mode fallback condition is the LLM key.
  *
- * Note: this only checks for the *presence* of env vars; it does not
- * validate them. A misconfigured key will surface as an `error` event from
- * the pipeline itself.
+ * Note: this only checks for the *presence* of OPENAI_API_KEY. A
+ * misconfigured key surfaces as an `error` ReasoningEvent from the
+ * pipeline itself.
  */
 export function isAgentPipelineReady(): boolean {
-  return Boolean(
-    process.env.OPENAI_API_KEY &&
-      process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
+  return Boolean(process.env.OPENAI_API_KEY);
 }
 
 /**
@@ -53,12 +58,29 @@ export async function* streamAgentEvents(
   signal?: AbortSignal,
 ): AsyncGenerator<ReasoningEvent> {
   try {
+    // Step 0 — classify. Cheap structured-output call. If the user is
+    // asking a follow-up about a prior turn, branch into the Q&A path
+    // and skip the recommendation pipeline entirely.
+    const mode = await classifyQuery(ctx.query, ctx.history);
+    if (signal?.aborted) return;
+
+    if (mode === "qna") {
+      const result = await answerQuestion(ctx.query, ctx.profile, ctx.history);
+      if (signal?.aborted) return;
+      yield {
+        type: "qna",
+        answer: result.answer,
+        cited_item_names: result.cited_item_names,
+      };
+      return;
+    }
+
     // Step 1 — parse
     const intent = await parseQuery(ctx.query);
     if (signal?.aborted) return;
     yield {
       type: "parse",
-      message: `Parsed intent: ${intent.query_type}`,
+      message: parseMessage(ctx.profile, intent),
       result: intent,
     };
 
@@ -67,9 +89,7 @@ export async function* streamAgentEvents(
     if (signal?.aborted) return;
     yield {
       type: "retrieve",
-      message: `Found ${candidates.length} candidate item${
-        candidates.length === 1 ? "" : "s"
-      }.`,
+      message: retrieveMessage(intent, candidates.length),
       count: candidates.length,
     };
 
@@ -113,4 +133,20 @@ export async function* streamAgentEvents(
     const message = err instanceof Error ? err.message : "Pipeline failure";
     yield { type: "error", step: "pipeline", message };
   }
+}
+
+function parseMessage(profile: UserProfile, intent: ParsedIntent): string {
+  const where = intent.location_filter ?? "Cal Poly dining";
+  const mealPart = intent.meal_period_filter
+    ? `${intent.meal_period_filter.toLowerCase()} options`
+    : "options";
+  return `Looking for ${mealPart} at ${where} — filtering through your profile (${profile.severity}).`;
+}
+
+function retrieveMessage(intent: ParsedIntent, count: number): string {
+  const where = intent.location_filter ?? "Cal Poly dining";
+  const mealPart = intent.meal_period_filter
+    ? `${intent.meal_period_filter.toLowerCase()}'s menu`
+    : "today's menu";
+  return `Found ${count} item${count === 1 ? "" : "s"} on ${mealPart} at ${where}.`;
 }

@@ -129,6 +129,13 @@ export type AgentResponse = {
       | "cross_contamination_risk"
       | "missing_data";
     explanation: string;
+    /**
+     * UI bucket. `avoid` = clearly incompatible with the user's profile
+     * (audit status was `unsafe`); `caution` = double-check (audit status
+     * was `flagged` or `insufficient_data`). Computed server-side from
+     * the deterministic audit; never trust the LLM to label severity.
+     */
+    severity: "caution" | "avoid";
   }>;
   reasoning_summary: string;
 };
@@ -155,4 +162,35 @@ export type ReasoningEvent =
       warnings: AgentResponse["warnings"];
       reasoning_summary: string;
     }
+  /**
+   * Terminal event for the Q&A path. Emitted when the user is asking a
+   * follow-up about a previously-recommended item rather than requesting
+   * a new ranking. Carries the LLM's grounded answer plus optional
+   * citations to specific items the answer leaned on.
+   */
+  | {
+      type: "qna";
+      answer: string;
+      cited_item_names: string[];
+    }
   | { type: "error"; message: string; step: string };
+
+/**
+ * Compact representation of a prior chat turn, sent from the client back
+ * to `/api/chat` so the classifier and Q&A LLM have the context the
+ * student is referring to. We never echo full menu_items rows in this
+ * payload — those get re-fetched server-side from the names listed here.
+ */
+export type ConversationTurn =
+  | {
+      mode: "recommendation";
+      query: string;
+      summary: string;
+      recommended_items: Array<{ item_name: string; location: string }>;
+      warned_items: Array<{ item_name: string }>;
+    }
+  | {
+      mode: "qna";
+      query: string;
+      answer: string;
+    };

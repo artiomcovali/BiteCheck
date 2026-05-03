@@ -25,7 +25,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/onboarding", "/dashboard", "/menu"];
+const PROTECTED_PREFIXES = ["/onboarding", "/dashboard", "/agent", "/menu", "/profile"];
 const PROTECTED_EXACT = new Set(["/"]);
 const PUBLIC_AUTH_PATHS = new Set(["/login", "/signup"]);
 
@@ -115,7 +115,7 @@ export async function middleware(req: NextRequest) {
 
     if (PUBLIC_AUTH_PATHS.has(pathname)) {
       const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = hasProfile === false ? "/onboarding" : "/";
+      redirectUrl.pathname = hasProfile === false ? "/onboarding" : "/dashboard";
       redirectUrl.search = "";
       return NextResponse.redirect(redirectUrl);
     }

@@ -26,7 +26,7 @@ export function MacroFilters({
     <section
       style={{
         position: "sticky",
-        top: 57,
+        top: 61,
         zIndex: 20,
         padding: "14px 20px 16px",
         background: "color-mix(in srgb, var(--bc-bg) 94%, transparent)",

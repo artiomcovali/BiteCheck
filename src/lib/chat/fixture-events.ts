@@ -157,12 +157,14 @@ export async function* streamFixtureEvents(
           {
             item_name: "Spiced Tofu Scramble",
             issue: "label_conflict",
+            severity: "avoid",
             explanation:
               "dietary_labels marks this Vegan, but the ingredients list includes \"redfish seasoning,\" which typically contains dried fish or shellfish derivatives. Until staff confirms the exact blend, we can't verify it's plant-based — and it could trigger your tree-nut allergen list if cross-blended.",
           },
           {
             item_name: "Pad Thai (Chef's Special)",
             issue: "cross_contamination_risk",
+            severity: "caution",
             explanation:
               "Asterisk in dietary_labels (Pad Thai*) signals shared prep with the wok station, which handles peanut sauces tonight. Tree-nut cross-contact risk is real here.",
           },

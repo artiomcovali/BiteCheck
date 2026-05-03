@@ -1,117 +1,42 @@
-import { redirect } from "next/navigation";
-import { getMenuItemsForToday, filterMenuItems } from "@/lib/api/menu-items";
-import {
-  expandUserProfileTokens,
-  parseDietaryLabels,
-  satisfiesDietaryRequirement,
-} from "@/lib/menu/dietary-labels";
-import {
-  loadHydratedProfile,
-  type HydratedUserProfile,
-} from "@/lib/user-profile";
-import type { MenuItem } from "@/lib/types";
-import { MenuList } from "@/components/bitecheck/menu/MenuList";
+import { redirect } from 'next/navigation';
+import { getAllMenuItems } from '@/lib/api/menu-items';
+import { buildMenuBrowseEntries } from '@/lib/menu/menu-browse';
+import { loadHydratedProfile } from '@/lib/user-profile';
+import { MenuList } from '@/components/bitecheck/menu/MenuList';
 
 export const metadata = {
-  title: "Menu · BiteCheck",
+  title: 'Menu · BiteCheck',
 };
 
 export default async function MenuPage() {
-  const profile = await loadHydratedProfile();
+  const [profile, items] = await Promise.all([loadHydratedProfile(), getAllMenuItems()]);
+
   if (!profile) {
-    redirect("/onboarding");
+    redirect('/onboarding');
   }
 
-  const items = await getMenuItemsForToday();
-  const visibleItems = filterMenuItems(items, {
-    excludeAllergens: profile.profile.allergens,
-    requireDietary: [
-      ...profile.profile.restrictions,
-      ...profile.profile.religious_dietary,
-    ],
-  });
+  const entries = buildMenuBrowseEntries(items, profile.profile);
 
-  const visibleKeys = new Set(visibleItems.map(getItemKey));
-  const hiddenItems = items
-    .filter((item) => !visibleKeys.has(getItemKey(item)))
-    .map((item) => ({
-      item,
-      reason: getHiddenReason(item, profile.profile),
-    }));
+  const dates = [...new Set(items.map((item) => item.date))].sort();
+  const dateLabel = formatDateRange(dates);
 
-  return (
-    <MenuList
-      dateLabel={formatMenuDate(items[0]?.date)}
-      visibleItems={visibleItems}
-      hiddenItems={hiddenItems}
-    />
-  );
+  return <MenuList dateLabel={dateLabel} entries={entries} availableDates={dates} />;
 }
 
-function getHiddenReason(
-  item: MenuItem,
-  profile: HydratedUserProfile["profile"],
-) {
-  const parsed = parseDietaryLabels(item.dietary_labels);
-  const presentTokens = new Set(parsed.allergens.map((entry) => entry.token));
-  const blockedTokens = expandUserProfileTokens(profile.allergens);
-  const matchedBlockedTokens = blockedTokens.filter((token) =>
-    presentTokens.has(token),
-  );
+function formatDateRange(dates: string[]) {
+  if (dates.length === 0) return 'No menu data available';
+  if (dates.length === 1) return formatSingleDate(dates[0]!);
 
-  if (matchedBlockedTokens.length > 0) {
-    return `Hidden because the dining labels include ${matchedBlockedTokens.join(
-      ", ",
-    )}, which conflicts with your profile.`;
-  }
-
-  const requirements = [
-    ...profile.restrictions,
-    ...profile.religious_dietary,
-  ];
-
-  for (const requirement of requirements) {
-    if (satisfiesDietaryRequirement(parsed, requirement)) continue;
-
-    const offendingTokens = expandUserProfileTokens([requirement]).filter(
-      (token) => presentTokens.has(token),
-    );
-
-    if (offendingTokens.length > 0) {
-      return `Hidden because your ${formatRequirementLabel(
-        requirement,
-      )} setting conflicts with ${offendingTokens.join(", ")} in the dining labels.`;
-    }
-
-    return `Hidden because this item is not clearly labeled ${formatRequirementLabel(
-      requirement,
-    )} in today's dining data.`;
-  }
-
-  return "Hidden by your profile filters.";
+  const first = formatSingleDate(dates[0]!);
+  const last = formatSingleDate(dates[dates.length - 1]!);
+  return `${first} – ${last}`;
 }
 
-function getItemKey(item: MenuItem) {
-  return [
-    item.date,
-    item.item_id,
-    item.location,
-    item.meal_period,
-    item.station,
-  ].join("::");
-}
-
-function formatRequirementLabel(value: string) {
-  return value.replace(/-/g, " ");
-}
-
-function formatMenuDate(date: string | undefined) {
-  if (!date) return "Today's menu";
-
+function formatSingleDate(date: string) {
   const parsed = new Date(`${date}T12:00:00-07:00`);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    weekday: "long",
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
   }).format(parsed);
 }

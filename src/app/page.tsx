@@ -1,5 +1,5 @@
-import { ChatPage } from "@/components/bitecheck/chat/ChatPage";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <ChatPage />;
+  redirect("/dashboard");
 }

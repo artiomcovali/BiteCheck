@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { useChatStream } from "@/lib/chat/use-chat-stream";
 import { getOrCreateSessionId } from "@/lib/chat/session";
-import { TopBar } from "./TopBar";
 import { EmptyChat } from "./EmptyChat";
 import { ChatInput } from "./ChatInput";
-import { TurnRenderer } from "./EventStream";
+import { ResultsView } from "@/components/bitecheck/results/ResultsView";
 
 /**
  * Top-level chat experience.
@@ -18,33 +18,19 @@ import { TurnRenderer } from "./EventStream";
  * sidebar/threads are intentionally not implemented since spec 03 explicitly
  * scopes them out for the streaming UI.
  */
-export function ChatPage() {
+export function ChatPage({ initialQuery }: { initialQuery?: string }) {
   const { profile } = useUser();
-  const [theme, setTheme] = React.useState<"light" | "dark">("light");
+  const router = useRouter();
   const [draft, setDraft] = React.useState("");
   const [sessionId, setSessionId] = React.useState<string>("");
   const { turns, streaming, send, reset } = useChatStream();
   const threadRef = React.useRef<HTMLDivElement | null>(null);
+  const ranInitialQueryRef = React.useRef<string | null>(null);
 
   // Resolve sessionId on the client (sessionStorage isn't available during SSR).
   React.useEffect(() => {
     setSessionId(getOrCreateSessionId());
   }, []);
-
-  // Apply theme to <html data-theme>. Reads once from system preference on
-  // mount, then user toggle takes over.
-  React.useEffect(() => {
-    const root = document.documentElement;
-    const initial =
-      root.getAttribute("data-theme") ??
-      (window.matchMedia?.("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light");
-    setTheme(initial as "light" | "dark");
-  }, []);
-  React.useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
 
   // Keep the latest card in view while events stream in.
   const lastEventCount = turns.reduce((n, t) => n + t.events.length, 0);
@@ -54,16 +40,21 @@ export function ChatPage() {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [lastEventCount, turns.length]);
 
+  React.useEffect(() => {
+    if (!initialQuery || !sessionId || !profile || streaming) return;
+    if (turns.length > 0) return;
+    if (ranInitialQueryRef.current === initialQuery) return;
+
+    ranInitialQueryRef.current = initialQuery;
+    void send(initialQuery, sessionId).then(() => {
+      router.replace("/agent");
+    });
+  }, [initialQuery, profile, router, send, sessionId, streaming, turns.length]);
+
   const handleAsk = async (q: string) => {
     if (!sessionId || !profile) return;
     setDraft("");
-    await send(q, profile.profile, sessionId);
-  };
-
-  const replayLastTurn = async () => {
-    const last = turns.at(-1);
-    if (!last || streaming || !sessionId || !profile) return;
-    await send(last.query, profile.profile, sessionId);
+    await send(q, sessionId);
   };
 
   return (
@@ -71,17 +62,9 @@ export function ChatPage() {
       style={{
         display: "flex",
         flexDirection: "column",
-        minHeight: "100vh",
-        background: "var(--bc-bg)",
+        minHeight: "calc(100vh - 58px)",
       }}
     >
-      <TopBar
-        onThemeToggle={() =>
-          setTheme((t) => (t === "dark" ? "light" : "dark"))
-        }
-        isDark={theme === "dark"}
-      />
-
       <main
         ref={threadRef}
         style={{
@@ -91,7 +74,11 @@ export function ChatPage() {
         }}
       >
         {turns.length === 0 ? (
-          <EmptyChat name={profile?.name ?? "there"} onAsk={handleAsk} />
+          <EmptyChat
+            name={profile?.name ?? "there"}
+            onAsk={handleAsk}
+            introLabel="BiteCheck Agent"
+          />
         ) : (
           <div
             style={{
@@ -103,16 +90,8 @@ export function ChatPage() {
               gap: 24,
             }}
           >
-            {turns.map((turn, i) => (
-              <TurnRenderer
-                key={turn.id}
-                query={turn.query}
-                events={turn.events}
-                status={turn.status}
-                isLastTurn={i === turns.length - 1}
-                onReplay={i === turns.length - 1 ? replayLastTurn : undefined}
-                error={turn.error}
-              />
+            {turns.map((turn) => (
+              <ResultsView key={turn.id} turn={turn} />
             ))}
             {turns.length > 0 && !streaming && (
               <div style={{ alignSelf: "center", marginTop: 4 }}>
@@ -137,7 +116,7 @@ export function ChatPage() {
         )}
       </main>
 
-      <div style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto", width: "100%", paddingBottom: 12 }}>
         <ChatInput
           value={draft}
           onChange={setDraft}

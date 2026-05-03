@@ -1,20 +1,27 @@
 "use client";
 
 import { Badge, Chip } from "@/components/bitecheck/primitives";
-import { parseDietaryLabels } from "@/lib/menu/dietary-labels";
-import type { MenuItem } from "@/lib/types";
+import type { MenuBrowseEntry } from "@/lib/menu/menu-browse";
 
 export function FoodCard({
-  item,
-  hidden = false,
-  hiddenReason,
+  entry,
 }: {
-  item: MenuItem;
-  hidden?: boolean;
-  hiddenReason?: string;
+  entry: MenuBrowseEntry;
 }) {
-  const parsedLabels = parseDietaryLabels(item.dietary_labels);
-  const restrictionChips = parsedLabels.restrictions.slice(0, 3);
+  const { item } = entry;
+  const restrictionChips = entry.tags.slice(0, 3);
+  const statusTone =
+    entry.safety === "safe"
+      ? "safe"
+      : entry.safety === "double-check"
+        ? "warn"
+        : "unsafe";
+  const statusLabel =
+    entry.safety === "safe"
+      ? "Safe"
+      : entry.safety === "double-check"
+        ? "Double check"
+        : "Avoid";
 
   return (
     <article
@@ -22,7 +29,11 @@ export function FoodCard({
         background: "var(--bc-surface)",
         borderRadius: 16,
         border: `1.5px solid ${
-          hidden ? "var(--bc-warn)" : "var(--bc-hairline)"
+          entry.safety === "avoid"
+            ? "var(--bc-unsafe)"
+            : entry.safety === "double-check"
+              ? "var(--bc-warn)"
+              : "var(--bc-hairline)"
         }`,
         boxShadow: "var(--bc-shadow-sm)",
         overflow: "hidden",
@@ -31,8 +42,12 @@ export function FoodCard({
       <div
         style={{
           height: 3,
-          background: hidden ? "var(--bc-warn)" : "var(--bc-primary)",
-          opacity: hidden ? 1 : 0.8,
+          background:
+            entry.safety === "avoid"
+              ? "var(--bc-unsafe)"
+              : entry.safety === "double-check"
+                ? "var(--bc-warn)"
+                : "var(--bc-primary)",
         }}
       />
       <div style={{ padding: 16, display: "grid", gap: 12 }}>
@@ -53,10 +68,7 @@ export function FoodCard({
               {item.location} · {item.meal_period} · {item.station}
             </div>
           </div>
-          <Badge
-            tone={hidden ? "warn" : "primary"}
-            label={hidden ? "Hidden by your profile" : "Shown in menu view"}
-          />
+          <Badge tone={statusTone} label={statusLabel} />
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -89,17 +101,28 @@ export function FoodCard({
           </div>
         )}
 
-        {hidden && hiddenReason && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {entry.hasAllergens && <Chip tone="warn" size="sm" label="Contains allergens" />}
+          {entry.hasMissingData && <Chip tone="warn" size="sm" label="Missing data" />}
+        </div>
+
+        {entry.safety !== "safe" && (
           <div
             className="bc-body-sm"
             style={{
-              color: "var(--bc-warn-ink)",
-              background: "var(--bc-warn-fog)",
+              color:
+                entry.safety === "avoid"
+                  ? "var(--bc-unsafe-ink)"
+                  : "var(--bc-warn-ink)",
+              background:
+                entry.safety === "avoid"
+                  ? "var(--bc-unsafe-fog)"
+                  : "var(--bc-warn-fog)",
               borderRadius: 12,
               padding: "10px 12px",
             }}
           >
-            {hiddenReason}
+            {entry.reason}
           </div>
         )}
       </div>
@@ -116,3 +139,4 @@ function formatGrams(value: number | null) {
   if (value === null) return "n/a";
   return `${formatNumber(value)}g`;
 }
+

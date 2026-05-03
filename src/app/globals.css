@@ -28,9 +28,9 @@
   --bc-safe-ink: #3f5e55;
   --bc-safe-fog: #e5ede9;
 
-  --bc-warn: #ff6a39;
-  --bc-warn-ink: #a23914;
-  --bc-warn-fog: #fceae0;
+  --bc-warn: #e5a100;
+  --bc-warn-ink: #7a5600;
+  --bc-warn-fog: #fef8e7;
 
   --bc-unsafe: #a23914;
   --bc-unsafe-ink: #6d2308;
@@ -43,45 +43,9 @@
   --bc-shadow-md: 0 1px 2px rgba(15, 26, 34, 0.04), 0 4px 14px rgba(15, 26, 34, 0.06);
   --bc-shadow-lg: 0 2px 6px rgba(15, 26, 34, 0.05), 0 12px 28px rgba(15, 26, 34, 0.08);
 
-  --bc-font-display: "Inter Tight", "Inter", -apple-system, system-ui, sans-serif;
-  --bc-font-body: "Inter", -apple-system, system-ui, sans-serif;
-  --bc-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-}
-
-[data-theme="dark"] {
-  --bc-bg: #0e1620;
-  --bc-surface: #172230;
-  --bc-surface-alt: #1f2d3c;
-  --bc-hairline: rgba(255, 255, 255, 0.07);
-  --bc-hairline-2: rgba(255, 255, 255, 0.14);
-
-  --bc-text: #f2f0e9;
-  --bc-text-sec: #a6a8a2;
-  --bc-text-ter: #6e726e;
-  --bc-text-inv: #0e1620;
-
-  --bc-primary: #9cc4b4;
-  --bc-primary-ink: #c4ddd2;
-  --bc-primary-fog: #1b2e27;
-
-  --bc-safe: #9cc4b4;
-  --bc-safe-ink: #c4ddd2;
-  --bc-safe-fog: #1b2e27;
-
-  --bc-warn: #ff8a5e;
-  --bc-warn-ink: #ffb596;
-  --bc-warn-fog: #3a1f11;
-
-  --bc-unsafe: #e27250;
-  --bc-unsafe-ink: #f0997c;
-  --bc-unsafe-fog: #3a1a0e;
-
-  --bc-neutral: #9ea5a0;
-  --bc-neutral-fog: #1f2730;
-
-  --bc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --bc-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --bc-shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.5);
+  --bc-font-display: 'Inter Tight', 'Inter', -apple-system, system-ui, sans-serif;
+  --bc-font-body: 'Inter', -apple-system, system-ui, sans-serif;
+  --bc-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 html,
@@ -244,11 +208,27 @@ body {
   overflow: hidden;
 }
 
+/* Page transition — fade + subtle slide on route change */
+@keyframes bcPageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.bc-page-enter {
+  animation: bcPageEnter 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bc-card-in,
   .bc-shake,
   .bc-expand,
-  .bc-shimmer {
+  .bc-shimmer,
+  .bc-page-enter {
     animation: none;
   }
 }

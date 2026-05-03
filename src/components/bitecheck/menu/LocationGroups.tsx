@@ -1,72 +1,48 @@
-"use client";
+'use client';
 
-import { FoodCard } from "./FoodCard";
-import type { HiddenMenuEntry } from "./MenuList";
-import type { MenuItem } from "@/lib/types";
+import type { MenuBrowseEntry } from '@/lib/menu/menu-browse';
+import { FoodCard } from './FoodCard';
 
-type MenuEntry = { item: MenuItem; reason?: string };
-
-export function LocationGroups({
-  entries,
-  hidden = false,
-}: {
-  entries: Array<{ item: MenuItem; reason?: string }>;
-  hidden?: boolean;
-}) {
-  const byBuilding = groupByBuilding(entries);
+export function LocationGroups({ entries }: { entries: MenuBrowseEntry[] }) {
+  const byLocation = groupByLocation(entries);
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      {byBuilding.map(([building, locations]) => (
-        <section key={building} style={{ display: "grid", gap: 14 }}>
-          <div>
-            <div className="bc-label" style={{ color: "var(--bc-text-ter)" }}>
-              Building
+    <div style={{ display: 'grid', gap: 24 }}>
+      {byLocation.map(([location, building, items]) => (
+        <section
+          key={`${location}-${building}`}
+          style={{
+            display: 'grid',
+            gap: 12,
+            padding: 16,
+            borderRadius: 20,
+            background: 'color-mix(in srgb, var(--bc-surface) 84%, transparent)',
+            border: '1px solid var(--bc-hairline)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div>
+              <div className="bc-h2">{location}</div>
+              <div className="bc-meta" style={{ color: 'var(--bc-text-ter)', marginTop: 2 }}>
+                {building}
+              </div>
             </div>
-            <div className="bc-h2" style={{ marginTop: 4 }}>
-              {building}
+            <div className="bc-meta" style={{ color: 'var(--bc-text-ter)' }}>
+              {items.length} item{items.length === 1 ? '' : 's'}
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 16 }}>
-            {locations.map(([location, items]) => (
-              <div
-                key={`${building}-${location}`}
-                style={{
-                  display: "grid",
-                  gap: 12,
-                  padding: 16,
-                  borderRadius: 20,
-                  background: "color-mix(in srgb, var(--bc-surface) 84%, transparent)",
-                  border: "1px solid var(--bc-hairline)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div className="bc-h3">{location}</div>
-                  <div className="bc-meta" style={{ color: "var(--bc-text-ter)" }}>
-                    {items.length} item{items.length === 1 ? "" : "s"}
-                  </div>
-                </div>
-
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {items.map((entry) => (
-                    <FoodCard
-                      key={getItemKey(entry.item)}
-                      item={entry.item}
-                      hidden={hidden}
-                      hiddenReason={entry.reason}
-                    />
-                  ))}
-                </div>
-              </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {items.map((entry) => (
+              <FoodCard key={getItemKey(entry.item)} entry={entry} />
             ))}
           </div>
         </section>
@@ -75,37 +51,25 @@ export function LocationGroups({
   );
 }
 
-function groupByBuilding(entries: MenuEntry[]) {
-  const buildings = new Map<string, Map<string, MenuEntry[]>>();
+function groupByLocation(entries: MenuBrowseEntry[]): Array<[string, string, MenuBrowseEntry[]]> {
+  const groups = new Map<string, { building: string; items: MenuBrowseEntry[] }>();
 
   for (const entry of entries) {
-    const building = entry.item.building || "Unknown building";
-    const location = entry.item.location || "Unknown location";
+    const location = entry.item.location || 'Unknown location';
+    const building = entry.item.building || 'Unknown building';
 
-    if (!buildings.has(building)) {
-      buildings.set(building, new Map());
+    if (!groups.has(location)) {
+      groups.set(location, { building, items: [] });
     }
 
-    const locations = buildings.get(building)!;
-    if (!locations.has(location)) {
-      locations.set(location, []);
-    }
-
-    locations.get(location)!.push(entry);
+    groups.get(location)!.items.push(entry);
   }
 
-  return [...buildings.entries()].map(([building, locations]) => [
-    building,
-    [...locations.entries()],
-  ]) as Array<[string, Array<[string, MenuEntry[]]>]>;
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([location, { building, items }]) => [location, building, items]);
 }
 
-function getItemKey(item: MenuItem) {
-  return [
-    item.date,
-    item.item_id,
-    item.location,
-    item.meal_period,
-    item.station,
-  ].join("::");
+function getItemKey(item: MenuBrowseEntry['item']) {
+  return [item.date, item.item_id, item.location, item.meal_period, item.station].join('::');
 }
