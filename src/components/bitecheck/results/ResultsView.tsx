@@ -107,7 +107,10 @@ function ResultsBody({ result }: { result: UIResult }) {
 }
 
 function Header({ result }: { result: UIResult }) {
-  const where = result.location_label ? `at ${result.location_label}` : 'at Cal Poly dining today';
+  const where =
+    result.location_label && result.location_label !== 'null'
+      ? `at ${result.location_label}`
+      : 'at Cal Poly dining today';
   const headline = result.isEmpty
     ? `Nothing on the menu cleared your profile ${where}.`
     : `Here's what you can eat ${where}.`;

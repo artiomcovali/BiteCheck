@@ -11,7 +11,7 @@
  * `openai/helpers/zod`.
  */
 
-import OpenAI from "openai";
+import OpenAI from 'openai';
 
 let cached: OpenAI | null = null;
 
@@ -19,11 +19,11 @@ export function getOpenAIClient(): OpenAI {
   if (cached) return cached;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not set");
+    throw new Error('OPENAI_API_KEY is not set');
   }
   cached = new OpenAI({ apiKey });
   return cached;
 }
 
-/** Default per-call timeout, per steering doc. */
-export const OPENAI_TIMEOUT_MS = 8_000;
+/** Default per-call timeout — generous for Vercel cold starts. */
+export const OPENAI_TIMEOUT_MS = 30_000;

@@ -34,6 +34,21 @@ export async function getMenuItemsForToday(date?: string): Promise<MenuItem[]> {
     throw new Error(`Failed to fetch menu items: ${error.message}`);
   }
 
+  // If no items for today (e.g. data hasn't been refreshed yet),
+  // fall back to the most recent date that has data.
+  if ((!data || data.length === 0) && !date) {
+    const { data: latestRow, error: latestError } = await client
+      .from('menu_items')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!latestError && latestRow?.date && latestRow.date !== targetDate) {
+      return getMenuItemsForToday(latestRow.date);
+    }
+  }
+
   return (data ?? []) as MenuItem[];
 }
 

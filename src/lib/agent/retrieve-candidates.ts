@@ -55,7 +55,10 @@ function filterByIntent(items: MenuItem[], intent: ParsedIntent): MenuItem[] {
     const goal = intent.nutritional_goal;
     if (!goal) return true;
     const value = readNutrient(item, goal.nutrient);
-    if (value === null) return false;
+    // Unknown nutrient data shouldn't pre-filter the item out — Cal Poly's
+    // dataset is sparse for some nutrients. selectCandidates sorts nulls
+    // to the end so confirmed matches still surface first.
+    if (value === null) return true;
     return goal.op === 'min' ? value >= goal.target : value <= goal.target;
   };
 
