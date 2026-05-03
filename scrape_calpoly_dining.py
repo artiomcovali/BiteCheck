@@ -167,6 +167,74 @@ class Location:
     building: str = ""
 
 
+class BrowserJsonFetcher:
+    def __init__(self, base_url: str):
+        try:
+            from playwright.sync_api import sync_playwright  # type: ignore
+        except Exception as exc:
+            raise RuntimeError(
+                "Playwright is not installed. Run `pip install playwright && python3 -m playwright install chromium`."
+            ) from exc
+
+        self._playwright = sync_playwright().start()
+        self._browser = self._playwright.chromium.launch(headless=True)
+        self._context = self._browser.new_context(
+            user_agent=random.choice(USER_AGENTS),
+            viewport={"width": 1440, "height": 1100},
+        )
+        self._page = self._context.new_page()
+        self._base_url = base_url
+        self._warm()
+
+    def _warm(self) -> None:
+        self._page.goto(self._base_url, wait_until="domcontentloaded", timeout=60000)
+        self._page.wait_for_timeout(5000)
+
+    def fetch_json(self, url: str, *, timeout_ms: int = 35000) -> Any:
+        result = self._page.evaluate(
+            """
+            async ({ url, timeoutMs }) => {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), timeoutMs);
+              try {
+                const response = await fetch(url, {
+                  method: "GET",
+                  credentials: "include",
+                  signal: controller.signal,
+                  headers: {
+                    "Accept": "application/json,text/plain,*/*",
+                  },
+                });
+                const text = await response.text();
+                return {
+                  ok: response.ok,
+                  status: response.status,
+                  text,
+                };
+              } finally {
+                clearTimeout(timer);
+              }
+            }
+            """,
+            {"url": url, "timeoutMs": timeout_ms},
+        )
+        if not result.get("ok"):
+            raise RuntimeError(f"HTTP {result.get('status')}: {result.get('text', '')[:200]}")
+        try:
+            return json.loads(result.get("text") or "null")
+        except Exception as exc:
+            raise RuntimeError(f"Browser fetch returned non-JSON for {url}: {result.get('text', '')[:200]}") from exc
+
+    def close(self) -> None:
+        try:
+            self._context.close()
+        finally:
+            try:
+                self._browser.close()
+            finally:
+                self._playwright.stop()
+
+
 def log(msg: str) -> None:
     print(msg, file=sys.stderr)
 
@@ -189,7 +257,14 @@ def make_session(base_url: str) -> requests.Session:
     return session
 
 
-def request_json(session: requests.Session, url: str, *, retries: int = 3, sleep: float = 0.8) -> Any:
+def request_json(
+    session: requests.Session,
+    url: str,
+    *,
+    retries: int = 3,
+    sleep: float = 0.8,
+    browser_fetcher: BrowserJsonFetcher | None = None,
+) -> Any:
     last_exc: Exception | None = None
     for attempt in range(retries):
         try:
@@ -200,6 +275,11 @@ def request_json(session: requests.Session, url: str, *, retries: int = 3, sleep
             return resp.json()
         except Exception as exc:
             last_exc = exc
+            if browser_fetcher is not None and "HTTP 403" in str(exc):
+                try:
+                    return browser_fetcher.fetch_json(url)
+                except Exception as browser_exc:
+                    last_exc = browser_exc
             if attempt < retries - 1:
                 time.sleep(sleep * (attempt + 1))
     raise RuntimeError(f"Failed to fetch {url}: {last_exc}")
@@ -207,10 +287,18 @@ def request_json(session: requests.Session, url: str, *, retries: int = 3, sleep
 
 
 
-def request_json_probe(session: requests.Session, url: str, *, timeout: float = 3.0) -> Any:
+def request_json_probe(
+    session: requests.Session,
+    url: str,
+    *,
+    timeout: float = 3.0,
+    browser_fetcher: BrowserJsonFetcher | None = None,
+) -> Any:
     """Fast, single-attempt fetch used only while validating many candidate IDs."""
     resp = session.get(url, timeout=timeout)
     if resp.status_code in {403, 404, 429, 500, 502, 503, 504}:
+        if browser_fetcher is not None and resp.status_code == 403:
+            return browser_fetcher.fetch_json(url, timeout_ms=int(timeout * 1000))
         raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:120]}")
     resp.raise_for_status()
     return resp.json()
@@ -393,7 +481,12 @@ def discover_locations_from_assets(assets: list[tuple[str, str]]) -> list[Locati
     return unique_locations(locations)
 
 
-def discover_locations_from_api(session: requests.Session, site_id: str | None, date: dt.date) -> list[Location]:
+def discover_locations_from_api(
+    session: requests.Session,
+    site_id: str | None,
+    date: dt.date,
+    browser_fetcher: BrowserJsonFetcher | None = None,
+) -> list[Location]:
     if not site_id:
         return []
     date_s = date.isoformat()
@@ -409,7 +502,7 @@ def discover_locations_from_api(session: requests.Session, site_id: str | None, 
     ]
     for url in candidates:
         try:
-            data = request_json(session, url)
+            data = request_json(session, url, browser_fetcher=browser_fetcher)
         except Exception as exc:
             log(f"  discovery endpoint failed: {url} ({exc})")
             continue
@@ -426,6 +519,7 @@ def probe_menu_locations(
     date: dt.date,
     max_locations: int = 500,
     workers: int = 24,
+    browser_fetcher: BrowserJsonFetcher | None = None,
 ) -> list[Location]:
     """Filter candidate ids down to real menu locations.
 
@@ -451,7 +545,12 @@ def probe_menu_locations(
         ]
         for url in urls:
             try:
-                data = request_json_probe(session, url, timeout=3.0)
+                data = request_json_probe(
+                    session,
+                    url,
+                    timeout=3.0,
+                    browser_fetcher=browser_fetcher,
+                )
                 periods = data.get("periods", []) if isinstance(data, dict) else []
                 if periods:
                     return loc
@@ -634,6 +733,7 @@ def get_locations(
     max_candidates: int,
     probe_workers: int,
     force_discovery: bool = False,
+    browser_fetcher: BrowserJsonFetcher | None = None,
 ) -> list[Location]:
     if manual_locations:
         return unique_locations(manual_locations)
@@ -648,14 +748,26 @@ def get_locations(
         if site_id:
             log(f"Discovered site_id={site_id}")
 
-    locations = discover_locations_from_api(session, site_id, start_date)
+    locations = discover_locations_from_api(
+        session,
+        site_id,
+        start_date,
+        browser_fetcher=browser_fetcher,
+    )
     if locations:
         return locations
 
     locations = discover_locations_from_assets(assets)
     if locations:
         log(f"Discovered {len(locations)} candidate location IDs from page assets; validating menu endpoints...")
-        valid_locations = probe_menu_locations(session, locations, start_date, max_locations=max_candidates, workers=probe_workers)
+        valid_locations = probe_menu_locations(
+            session,
+            locations,
+            start_date,
+            max_locations=max_candidates,
+            workers=probe_workers,
+            browser_fetcher=browser_fetcher,
+        )
         if valid_locations:
             log(f"Validated {len(valid_locations)} menu-capable locations from page assets.")
             return valid_locations
@@ -682,7 +794,14 @@ def get_locations(
 
         if locations:
             log(f"Browser found {len(locations)} candidate locations; validating menu endpoints...")
-            valid_locations = probe_menu_locations(session, locations, start_date, max_locations=max_candidates, workers=probe_workers)
+            valid_locations = probe_menu_locations(
+                session,
+                locations,
+                start_date,
+                max_locations=max_candidates,
+                workers=probe_workers,
+                browser_fetcher=browser_fetcher,
+            )
             if valid_locations:
                 log(f"Validated {len(valid_locations)} browser-discovered menu locations.")
                 return valid_locations
@@ -696,7 +815,12 @@ def get_locations(
     )
 
 
-def get_periods(session: requests.Session, location_id: str, date: str) -> list[dict[str, Any]]:
+def get_periods(
+    session: requests.Session,
+    location_id: str,
+    date: str,
+    browser_fetcher: BrowserJsonFetcher | None = None,
+) -> list[dict[str, Any]]:
     urls = [
         f"{APIV4_URL}/locations/{location_id}/periods?platform=0&date={date}",
         f"{BASE_API_URL}/location/{location_id}/periods?platform=0&date={date}",
@@ -704,7 +828,7 @@ def get_periods(session: requests.Session, location_id: str, date: str) -> list[
     last_error = None
     for url in urls:
         try:
-            data = request_json(session, url)
+            data = request_json(session, url, browser_fetcher=browser_fetcher)
             periods = data.get("periods", []) if isinstance(data, dict) else []
             return [p for p in periods if isinstance(p, dict) and p.get("id")]
         except Exception as exc:
@@ -712,7 +836,13 @@ def get_periods(session: requests.Session, location_id: str, date: str) -> list[
     raise RuntimeError(f"Could not fetch periods for {location_id}: {last_error}")
 
 
-def get_menu_for_period(session: requests.Session, location_id: str, period_id: str, date: str) -> dict[str, Any]:
+def get_menu_for_period(
+    session: requests.Session,
+    location_id: str,
+    period_id: str,
+    date: str,
+    browser_fetcher: BrowserJsonFetcher | None = None,
+) -> dict[str, Any]:
     urls = [
         f"{APIV4_URL}/locations/{location_id}/menu?date={date}&period={period_id}",
         f"{BASE_API_URL}/location/{location_id}/periods/{period_id}?platform=0&date={date}",
@@ -720,19 +850,28 @@ def get_menu_for_period(session: requests.Session, location_id: str, period_id: 
     last_error = None
     for url in urls:
         try:
-            data = request_json(session, url)
+            data = request_json(session, url, browser_fetcher=browser_fetcher)
             return data if isinstance(data, dict) else {}
         except Exception as exc:
             last_error = exc
     raise RuntimeError(f"Could not fetch menu for {location_id} / {period_id}: {last_error}")
 
 
-def name_location_from_periods(session: requests.Session, location: Location, date_s: str) -> Location:
+def name_location_from_periods(
+    session: requests.Session,
+    location: Location,
+    date_s: str,
+    browser_fetcher: BrowserJsonFetcher | None = None,
+) -> Location:
     if location.name != location.id:
         return location
     # API periods response sometimes includes location info. Best-effort naming.
     try:
-        data = request_json(session, f"{BASE_API_URL}/location/{location.id}/periods?platform=0&date={date_s}")
+        data = request_json(
+            session,
+            f"{BASE_API_URL}/location/{location.id}/periods?platform=0&date={date_s}",
+            browser_fetcher=browser_fetcher,
+        )
         for obj in flatten_json(data):
             loc = parse_location(obj)
             if loc and loc.id == location.id and loc.name != location.id:
@@ -818,6 +957,7 @@ def scrape_week(
     start_date: dt.date,
     days: int,
     throttle: float,
+    browser_fetcher: BrowserJsonFetcher | None = None,
 ) -> list[dict[str, str]]:
     log(f"Found {len(locations)} locations.")
     rows: list[dict[str, str]] = []
@@ -828,9 +968,19 @@ def scrape_week(
         log(f"Scraping {date_s}...")
 
         for original_location in locations:
-            location = name_location_from_periods(session, original_location, date_s)
+            location = name_location_from_periods(
+                session,
+                original_location,
+                date_s,
+                browser_fetcher=browser_fetcher,
+            )
             try:
-                periods = get_periods(session, location.id, date_s)
+                periods = get_periods(
+                    session,
+                    location.id,
+                    date_s,
+                    browser_fetcher=browser_fetcher,
+                )
             except Exception as exc:
                 log(f"  WARN periods failed for {location.name}: {exc}")
                 continue
@@ -839,7 +989,13 @@ def scrape_week(
                 period_id = str(period.get("id"))
                 period_name = normalize_text(period.get("name") or period.get("label"))
                 try:
-                    menu_json = get_menu_for_period(session, location.id, period_id, date_s)
+                    menu_json = get_menu_for_period(
+                        session,
+                        location.id,
+                        period_id,
+                        date_s,
+                        browser_fetcher=browser_fetcher,
+                    )
                 except Exception as exc:
                     log(f"  WARN menu failed for {location.name} / {period_name}: {exc}")
                     continue
@@ -867,6 +1023,11 @@ def main() -> None:
     parser.add_argument("--site-id", default=os.getenv("DINEONCAMPUS_SITE_ID"), help="Optional DineOnCampus site_id override.")
     parser.add_argument("--location", action="append", default=[], help="Manual location override as 'Name=LOCATION_ID'. Can be repeated.")
     parser.add_argument("--browser-discovery", action="store_true", help="Use Playwright to discover location IDs if HTTP discovery fails.")
+    parser.add_argument(
+        "--browser-http-fallback",
+        action="store_true",
+        help="Use Playwright-backed fetches when DineOnCampus blocks direct API requests with Cloudflare.",
+    )
     parser.add_argument("--force-discovery", action="store_true", help="Ignore built-in Cal Poly location IDs and rediscover from the site.")
     parser.add_argument("--max-candidates", type=int, default=500, help="Max discovered candidate IDs to validate. Default: 500.")
     parser.add_argument("--probe-workers", type=int, default=24, help="Concurrent probe workers for candidate validation. Default: 24.")
@@ -882,30 +1043,44 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     session = make_session(args.url)
-    manual_locations = parse_location_args(args.location)
-    locations = get_locations(
-        session,
-        base_url=args.url,
-        site_id=args.site_id,
-        start_date=start,
-        browser_discovery=args.browser_discovery,
-        manual_locations=manual_locations,
-        max_candidates=args.max_candidates,
-        probe_workers=args.probe_workers,
-        force_discovery=args.force_discovery,
-    )
+    browser_fetcher = BrowserJsonFetcher(args.url) if args.browser_http_fallback else None
 
-    rows = scrape_week(session, locations, start, args.days, args.throttle)
-    rows.sort(key=lambda r: (r["date"], r["location"], r["meal_period"], r["station"], r["item_name"]))
+    try:
+        manual_locations = parse_location_args(args.location)
+        locations = get_locations(
+            session,
+            base_url=args.url,
+            site_id=args.site_id,
+            start_date=start,
+            browser_discovery=args.browser_discovery,
+            manual_locations=manual_locations,
+            max_candidates=args.max_candidates,
+            probe_workers=args.probe_workers,
+            force_discovery=args.force_discovery,
+            browser_fetcher=browser_fetcher,
+        )
 
-    with out_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
-        writer.writeheader()
-        writer.writerows(rows)
+        rows = scrape_week(
+            session,
+            locations,
+            start,
+            args.days,
+            args.throttle,
+            browser_fetcher=browser_fetcher,
+        )
+        rows.sort(key=lambda r: (r["date"], r["location"], r["meal_period"], r["station"], r["item_name"]))
 
-    log(f"Wrote {len(rows)} rows to {out_path}")
-    if len(rows) == 0:
-        log("WARN: CSV was created but no menu rows were found. Try --browser-discovery, or pass a known location with --location NAME=LOCATION_ID.")
+        with out_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        log(f"Wrote {len(rows)} rows to {out_path}")
+        if len(rows) == 0:
+            log("WARN: CSV was created but no menu rows were found. Try --browser-discovery, or pass a known location with --location NAME=LOCATION_ID.")
+    finally:
+        if browser_fetcher is not None:
+            browser_fetcher.close()
 
 
 if __name__ == "__main__":

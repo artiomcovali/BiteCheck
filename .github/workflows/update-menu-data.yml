@@ -10,10 +10,12 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      NEXT_PUBLIC_SUPABASE_URL: '${{ secrets.SUPABASE_URL }}'
       SUPABASE_URL: '${{ secrets.SUPABASE_URL }}'
       SUPABASE_SERVICE_ROLE_KEY: '${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}'
       MENU_TABLE: 'menu_items'
       PLAYWRIGHT_BROWSERS_PATH: '0'
+      CSV_OUT: 'calpoly_menu_weekly.csv'
 
     steps:
       - name: Checkout repo
@@ -42,21 +44,16 @@ jobs:
         run: |
           python3 scrape_calpoly_dining.py \
             --url https://dineoncampus.com/calpoly/ \
-            --browser-discovery
-
-      - name: Find generated CSV
-        id: find_csv
-        run: |
-          CSV_FILE=$(ls calpoly_menu_*.csv | head -n 1)
-          echo "csv_file=$CSV_FILE" >> "$GITHUB_OUTPUT"
-          echo "Found CSV: $CSV_FILE"
+            --browser-discovery \
+            --browser-http-fallback \
+            --out "${CSV_OUT}"
 
       - name: Replace Supabase menu data
         run: |
-          node scripts/import-menu-csv.js "${{ steps.find_csv.outputs.csv_file }}"
+          npx --yes tsx scripts/import-csv.ts "${CSV_OUT}"
 
       - name: Upload CSV artifact
         uses: actions/upload-artifact@v4
         with:
           name: calpoly-menu
-          path: calpoly_menu_*.csv
+          path: '${{ env.CSV_OUT }}'
