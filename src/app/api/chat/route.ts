@@ -25,7 +25,6 @@ import { streamReasoningEvents } from '@/lib/chat/sse';
 import { streamFixtureEvents } from '@/lib/chat/fixture-events';
 import { isAgentPipelineReady, streamAgentEvents } from '@/lib/chat/agent-stream';
 import { rateLimiter, extractIp } from '@/lib/security/rate-limiter';
-import { guardInput } from '@/lib/security/input-guard';
 import { loadHydratedProfile } from '@/lib/user-profile';
 
 export const runtime = 'nodejs';
@@ -69,13 +68,7 @@ export async function POST(req: Request) {
   }
 
   const { query, sessionId, history } = parsed.data;
-
-  // Input guard — sanitize injection attempts and reject off-topic queries
-  const guard = guardInput(query);
-  if (!guard.ok) {
-    return Response.json({ error: guard.reason }, { status: 400 });
-  }
-  const safeQuery = guard.sanitized;
+  const safeQuery = query.trim();
 
   // Auth comes first — rate-limit results don't leak whether a session
   // exists, but profile loads should never run without one.
