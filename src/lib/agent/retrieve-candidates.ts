@@ -15,9 +15,11 @@
  *     the whole day's menu instead of saturating in one alphabetically-
  *     first venue.
  *
- * Location filter is fuzzy: the user says "1901 marketplace" but the row
- * has `building = "1901 Marketplace"` and `location = "Red Radish"`. We
- * substring-match in both directions across both fields.
+ * Location filter is fuzzy across both `location` and `building`. Match wins
+ * if either field substring-matches, or if every needle token approximately
+ * matches a haystack token within an edit-distance threshold (handles common
+ * typos like "Raddish" → "Radish", "Grand" → "Grande", "Marketpace" →
+ * "Marketplace").
  */
 
 import { getMenuItemsForToday } from '@/lib/api/menu-items';
@@ -37,8 +39,10 @@ function filterByIntent(items: MenuItem[], intent: ParsedIntent): MenuItem[] {
 
   const matchesLocation = (item: MenuItem) => {
     if (!locationNeedle) return true;
-    const haystacks = [item.location, item.building].map((value) => value.toLowerCase());
-    return haystacks.some((h) => h.includes(locationNeedle) || locationNeedle.includes(h));
+    return (
+      fuzzyLocationMatch(locationNeedle, item.location) ||
+      fuzzyLocationMatch(locationNeedle, item.building)
+    );
   };
   const matchesMeal = (item: MenuItem) => {
     if (!mealNeedle) return true;
@@ -123,4 +127,56 @@ function readNutrient(item: MenuItem, nutrient: string): number | null {
   const key = nutrient as keyof MenuItem;
   const value = item[key];
   return typeof value === 'number' ? value : null;
+}
+
+const STOP_TOKENS = new Set(['and', 'the', 'at', 'a', 'of']);
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length > 0 && !STOP_TOKENS.has(t));
+}
+
+/**
+ * True if `a` and `b` are the same token, one contains the other as a
+ * substring, or their Levenshtein distance is within a length-scaled
+ * threshold. Tokens shorter than 4 chars require an exact match — a single
+ * edit away from "vg" is meaningless.
+ */
+function tokenMatches(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const minLen = Math.min(a.length, b.length);
+  if (minLen < 4) return false;
+  const threshold = minLen >= 8 ? 2 : 1;
+  return levenshtein(a, b) <= threshold;
+}
+
+function fuzzyLocationMatch(needle: string, haystack: string): boolean {
+  const needleTokens = tokenize(needle);
+  const haystackTokens = tokenize(haystack);
+  if (needleTokens.length === 0 || haystackTokens.length === 0) return false;
+  return needleTokens.every((nt) => haystackTokens.some((ht) => tokenMatches(nt, ht)));
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const m = a.length;
+  const n = b.length;
+  let prev = new Array<number>(n + 1);
+  let curr = new Array<number>(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n]!;
 }

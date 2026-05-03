@@ -29,6 +29,9 @@ import { loadHydratedProfile } from '@/lib/user-profile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Vercel's default 10s function budget kills the SSE stream mid-pipeline
+// (5 sequential OpenAI calls + DB read). 60s is the Hobby-plan ceiling.
+export const maxDuration = 60;
 
 const HistoryTurnSchema = z.discriminatedUnion('mode', [
   z.object({
