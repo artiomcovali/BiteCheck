@@ -240,25 +240,32 @@ def make_session(base_url: str) -> requests.Session:
 
     # Route through ScraperAPI proxy to bypass Cloudflare when running in CI.
     # Sign up at https://www.scraperapi.com/ — free tier gives 1,000 requests/month.
+    #
+    # When ScraperAPI is active we use a plain requests.Session instead of
+    # cloudscraper. cloudscraper patches the SSL context with
+    # check_hostname=True, which conflicts with verify=False needed for the
+    # proxy. ScraperAPI handles Cloudflare on their end, so cloudscraper's
+    # TLS fingerprinting is unnecessary.
     scraperapi_key = os.getenv("SCRAPERAPI_KEY")
     if scraperapi_key:
+        # Replace the cloudscraper session with a plain one to avoid SSL conflicts
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": random.choice(USER_AGENTS),
+                "Accept": "application/json,text/plain,*/*",
+                "Referer": base_url,
+                "Origin": origin,
+            }
+        )
         proxy_url = f"http://scraperapi:{scraperapi_key}@proxy-server.scraperapi.com:8001"
         session.proxies = {
             "http": proxy_url,
             "https": proxy_url,
         }
-        # ScraperAPI terminates TLS on their end, so we need to skip local
-        # certificate verification. cloudscraper sets check_hostname=True on
-        # its SSL context, which conflicts with verify=False — we need to
-        # explicitly disable check_hostname first.
-        import ssl
+        session.verify = False
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        adapter = session.get_adapter("https://")
-        if hasattr(adapter, "ssl_context"):
-            adapter.ssl_context.check_hostname = False
-            adapter.ssl_context.verify_mode = ssl.CERT_NONE
-        session.verify = False
         log("ScraperAPI proxy enabled — requests will route through ScraperAPI.")
 
     return session
