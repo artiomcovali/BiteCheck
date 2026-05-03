@@ -1,11 +1,17 @@
-# BiteCheck — Cal Poly Dining, Audited
+<p align="center">
+  <img src="public/bitecheck-banner.png" alt="BiteCheck" width="420" />
+</p>
 
-> **Category:** Human-Centered Design Track  
-> **Built with:** [Kiro](https://kiro.dev) · Next.js 15 · Supabase · OpenAI · TypeScript
+<h1 align="center">BiteCheck — Know Before You Bite</h1>
+
+<p align="center">
+  <strong>Category:</strong> Human-Centered Design Track &nbsp;·&nbsp;
+  <strong>Built with:</strong> <a href="https://kiro.dev">Kiro</a> · Next.js 15 · Supabase · OpenAI · TypeScript
+</p>
 
 BiteCheck is a safety-first dining assistant for Cal Poly San Luis Obispo students with allergies, religious dietary restrictions, and dietary preferences. It cross-references Cal Poly's real dining data against each student's profile and flags conflicts _before_ they eat — because a student with celiac disease, a Hindu vegetarian commitment, or a severe shellfish allergy can't afford to trust a single "Vegan" label that contradicts the ingredients list.
 
-**Live demo:** [bitecheck.vercel.app](https://bitecheck.vercel.app)
+**Live demo:** [bite-check-eight.vercel.app](https://bite-check-eight.vercel.app)
 
 ---
 
@@ -43,7 +49,19 @@ Every recommendation cites at least two data fields. Every warning explains whic
 
 ## Why Was This Built?
 
-Cal Poly's official dining app shows a "Vegan" tag and trusts it. But the underlying data tells a different story:
+### Students can't find reliable nutrition information
+
+This isn't a hypothetical problem. Cal Poly students have been posting about it on Reddit:
+
+- In [r/CalPoly: "Grub Hub Nutrition"](https://www.reddit.com/r/CalPoly/comments/1g37z1x/grub_hub_nutrition/), a student asked where to find nutrition facts for campus dining food. The GrubHub integration Cal Poly uses for ordering doesn't surface nutrition data in a usable way, and the official Dine On Campus app buries it behind multiple taps — if it's there at all.
+
+- In [r/CalPoly: "Best healthy food options"](https://www.reddit.com/r/CalPoly/comments/1kf3fi5/best_healthy_food_options/), students were crowdsourcing which dining halls have healthy options because there's no tool that lets them filter by nutrition, compare protein across locations, or find what actually fits their dietary needs.
+
+These posts reflect a pattern: students who care about what they eat — whether for health, fitness, allergies, or religious reasons — are left guessing. The official tools don't give them what they need, so they ask strangers on Reddit instead.
+
+### The data exists, but it's unreliable
+
+Cal Poly's dining dataset actually contains nutrition facts, ingredients, and dietary labels for every menu item. The problem is that the data has serious integrity issues that no existing tool addresses:
 
 - The `dietary_labels` field mixes dietary categories, allergens, ingredient flags, and cross-contamination warnings into one semicolon-delimited string
 - The dedicated `allergens` column is **empty across all 3,668 rows**
@@ -51,7 +69,9 @@ Cal Poly's official dining app shows a "Vegan" tag and trusts it. But the underl
 - Asterisk-suffixed entries like `Beef*` or `Mustard*` indicate cross-contamination risk, but nothing in the app explains what the asterisk means
 - The `ingredients` field is free-text and can contradict the labels
 
-A student with celiac disease who trusts a "Gluten-Free" label without checking the ingredients list is at real medical risk. A Hindu vegetarian student who sees no meat tag but also no vegetarian tag has no way to know if the item is safe. BiteCheck exists because **the gap between what the data says and what students need to know is a safety problem**, and no one else is solving it.
+A student with celiac disease who trusts a "Gluten-Free" label without checking the ingredients list is at real medical risk. A Hindu vegetarian student who sees no meat tag but also no vegetarian tag has no way to know if the item is safe. A student trying to hit their protein goals has to manually check every item across 10+ restaurants.
+
+BiteCheck exists because **the gap between what the data says and what students need to know is a safety problem**, and no one else is solving it. The nutrition data is there — it just needs an app that cross-checks it, flags the conflicts, and presents it in a way students can actually use.
 
 ---
 
@@ -155,7 +175,7 @@ Three specs drove the core implementation:
 
 - **`01-agent-decision-loop.md`** — Defined the 5-step pipeline (parse → retrieve → audit → rank → complete), the `ReasoningEvent` streaming contract, the `AgentResponse` output schema, and error handling behavior. Every agent module was implemented against this spec, and the spec's acceptance criteria ("no recommendation without source citations", "all flagged items visible as warnings") became the validation hook's assertions.
 
-- **`02-discrepancy-detection.md`** — Documented the five conflict categories derived from analyzing the actual Cal Poly CSV data. The spec captured the data realities (empty allergens column, asterisk semantics, mixed dietary_labels field) so Kiro could implement the detector with full context about _why_ each rule exists. This was more effective than vibe-coding the detector because the rules are safety-critical — getting them wrong means recommending food that could harm someone.
+- **`02-discrepancy-detection.md`** — Documented the five conflict categories derived from analyzing the actual Cal Poly CSV data. The spec captured the data realities (empty allergens column, asterisk semantics, mixed dietary*labels field) so Kiro could implement the detector with full context about \_why* each rule exists. This was more effective than vibe-coding the detector because the rules are safety-critical — getting them wrong means recommending food that could harm someone.
 
 - **`project-scaffold/`** — Requirements, design, and task breakdown for the initial project structure. This gave Kiro the full picture before writing any code, so the architecture decisions (server components for data pages, client components for interactive filters, SSE for streaming) were coherent from the start.
 
@@ -210,6 +230,14 @@ Beyond the spec-driven core, extensive vibe coding shaped the UI and UX:
 - Performance optimizations (parallel fetching, React cache)
 
 The conversation style was direct and iterative — "make it yellow," "get rid of the macro filters," "the dropdown is going off the box." Kiro handled these as immediate code changes with build verification, which kept the feedback loop tight.
+
+### Kiro Powers
+
+Two bundled powers were leveraged during development:
+
+- **Supabase Power** — Provided direct integration with the Supabase platform for database operations, authentication setup, and RLS policy management. Instead of manually writing migrations and cross-referencing Supabase docs, the Supabase power gave Kiro contextual awareness of the Postgres schema, auth flows, and row-level security patterns. This was especially valuable when setting up the `profiles` and `menu_items` tables with their RLS policies, and when wiring up the server-side auth client (`supabaseServer`) that the middleware and profile loader depend on. Without this power, configuring Supabase's SSR cookie-based auth with Next.js App Router would have required significantly more manual documentation lookup.
+
+- **Figma Power** — Used during the UI design-to-code phase to translate the BiteCheck design system into production components. The Figma power enabled Kiro to reference the design file directly when implementing the component library (`primitives.tsx`, `FoodCard`, `ResultItemCard`, etc.), ensuring the CSS custom properties (`--bc-primary`, `--bc-safe`, `--bc-warn`, `--bc-unsafe`), spacing, border radii, and typography tokens matched the design intent. This bridged the gap between the visual design and the coded components — rather than eyeballing screenshots, Kiro could pull exact values from the Figma source.
 
 ---
 
@@ -323,6 +351,8 @@ OPENAI_API_KEY=your_openai_key
 ## Maintainers
 
 - **Artiom Covali** — Cal Poly SLO
+- **Colin Yang** — Cal Poly SLO
+- **Cole Hackman** — Cal Poly SLO
 
 ---
 
