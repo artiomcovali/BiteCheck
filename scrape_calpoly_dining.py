@@ -247,10 +247,18 @@ def make_session(base_url: str) -> requests.Session:
             "http": proxy_url,
             "https": proxy_url,
         }
-        session.verify = False  # ScraperAPI proxy uses its own TLS termination
-        # Suppress InsecureRequestWarning when using the proxy
+        # ScraperAPI terminates TLS on their end, so we need to skip local
+        # certificate verification. cloudscraper sets check_hostname=True on
+        # its SSL context, which conflicts with verify=False — we need to
+        # explicitly disable check_hostname first.
+        import ssl
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        adapter = session.get_adapter("https://")
+        if hasattr(adapter, "ssl_context"):
+            adapter.ssl_context.check_hostname = False
+            adapter.ssl_context.verify_mode = ssl.CERT_NONE
+        session.verify = False
         log("ScraperAPI proxy enabled — requests will route through ScraperAPI.")
 
     return session
