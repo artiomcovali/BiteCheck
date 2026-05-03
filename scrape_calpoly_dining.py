@@ -191,39 +191,22 @@ class BrowserJsonFetcher:
         self._page.wait_for_timeout(5000)
 
     def fetch_json(self, url: str, *, timeout_ms: int = 35000) -> Any:
-        result = self._page.evaluate(
-            """
-            async ({ url, timeoutMs }) => {
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), timeoutMs);
-              try {
-                const response = await fetch(url, {
-                  method: "GET",
-                  credentials: "include",
-                  signal: controller.signal,
-                  headers: {
-                    "Accept": "application/json,text/plain,*/*",
-                  },
-                });
-                const text = await response.text();
-                return {
-                  ok: response.ok,
-                  status: response.status,
-                  text,
-                };
-              } finally {
-                clearTimeout(timer);
-              }
-            }
-            """,
-            {"url": url, "timeoutMs": timeout_ms},
+        response = self._context.request.get(
+            url,
+            timeout=timeout_ms,
+            headers={
+                "Accept": "application/json,text/plain,*/*",
+                "Referer": self._base_url,
+                "Origin": f"{urlparse(self._base_url).scheme}://{urlparse(self._base_url).netloc}",
+            },
         )
-        if not result.get("ok"):
-            raise RuntimeError(f"HTTP {result.get('status')}: {result.get('text', '')[:200]}")
+        text = response.text()
+        if not response.ok:
+            raise RuntimeError(f"HTTP {response.status}: {text[:200]}")
         try:
-            return json.loads(result.get("text") or "null")
+            return json.loads(text or "null")
         except Exception as exc:
-            raise RuntimeError(f"Browser fetch returned non-JSON for {url}: {result.get('text', '')[:200]}") from exc
+            raise RuntimeError(f"Browser fetch returned non-JSON for {url}: {text[:200]}") from exc
 
     def close(self) -> None:
         try:
