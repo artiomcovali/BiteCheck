@@ -237,6 +237,22 @@ def make_session(base_url: str) -> requests.Session:
             "Origin": origin,
         }
     )
+
+    # Route through ScraperAPI proxy to bypass Cloudflare when running in CI.
+    # Sign up at https://www.scraperapi.com/ — free tier gives 1,000 requests/month.
+    scraperapi_key = os.getenv("SCRAPERAPI_KEY")
+    if scraperapi_key:
+        proxy_url = f"http://scraperapi:{scraperapi_key}@proxy-server.scraperapi.com:8001"
+        session.proxies = {
+            "http": proxy_url,
+            "https": proxy_url,
+        }
+        session.verify = False  # ScraperAPI proxy uses its own TLS termination
+        # Suppress InsecureRequestWarning when using the proxy
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        log("ScraperAPI proxy enabled — requests will route through ScraperAPI.")
+
     return session
 
 
