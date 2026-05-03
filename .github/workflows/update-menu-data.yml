@@ -1,23 +1,19 @@
 name: Update Cal Poly Menu Data
 
-on:
+'on':
   schedule:
-    # Runs every Monday at 6:00 AM Pacific during PDT.
-    # GitHub Actions cron uses UTC, so 13:00 UTC = 6:00 AM PDT.
     - cron: '0 13 * * 1'
-
   workflow_dispatch:
 
 jobs:
-  scrape-and-update-supabase:
+  scrape-and-update:
     runs-on: ubuntu-latest
 
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      MENU_TABLE: menu_items
-      CSV_OUT: calpoly_menu_weekly.csv
+      SUPABASE_URL: '${{ secrets.SUPABASE_URL }}'
+      SUPABASE_SERVICE_ROLE_KEY: '${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}'
+      MENU_TABLE: 'menu_items'
+      PLAYWRIGHT_BROWSERS_PATH: '0'
 
     steps:
       - name: Checkout repo
@@ -42,16 +38,25 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Scrape weekly menu
+      - name: Run scraper
         run: |
-          python3 scrape_calpoly_dining.py --url https://dineoncampus.com/calpoly/ --out "${CSV_OUT}"
+          python3 scrape_calpoly_dining.py \
+            --url https://dineoncampus.com/calpoly/ \
+            --browser-discovery
+
+      - name: Find generated CSV
+        id: find_csv
+        run: |
+          CSV_FILE=$(ls calpoly_menu_*.csv | head -n 1)
+          echo "csv_file=$CSV_FILE" >> "$GITHUB_OUTPUT"
+          echo "Found CSV: $CSV_FILE"
 
       - name: Replace Supabase menu data
         run: |
-          npx --yes tsx scripts/import-csv.ts "${CSV_OUT}"
+          node scripts/import-menu-csv.js "${{ steps.find_csv.outputs.csv_file }}"
 
       - name: Upload CSV artifact
         uses: actions/upload-artifact@v4
         with:
-          name: weekly-calpoly-menu
-          path: "${{ env.CSV_OUT }}"
+          name: calpoly-menu
+          path: calpoly_menu_*.csv
